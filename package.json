@@ -5,6 +5,7 @@
     "discord.js-selfbot-v13": "^3.7.1",
     "dotenv": "^17.3.1",
     "groq-sdk": "^1.1.1",
+    "mongodb": "^7.1.0",
     "werift-rtp": "^0.8.8"
   }
 }

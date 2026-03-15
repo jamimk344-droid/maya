@@ -30,15 +30,16 @@ async function initDB() {
         console.log("\x1b[32m[Database]\x1b[0m Connected to MongoDB Atlas");
     } catch (err) {
         console.error("DB Connection Error:", err);
+        process.exit(1); // Stop if we can't connect to the brain
     }
 }
 
 client.on('ready', () => {
     console.log(`\x1b[35m[Maya]\x1b[0m System Active. Logged in as ${client.user.tag}`);
-    initDB();
 });
 
 client.on('messageCreate', async (message) => {
+    // Basic safety filters
     if (message.author.id === client.user.id || message.author.bot) return;
 
     const isHome = message.channel.id === HOME_CHANNEL;
@@ -66,7 +67,7 @@ client.on('messageCreate', async (message) => {
             // 2. Update score
             userData.score += 1;
 
-            // 3. Behavioral Logic (Stays exactly the same)
+            // 3. Friendship Tier Logic
             let vibe = "";
             let level = "";
             if (userData.score <= 10) {
@@ -105,7 +106,7 @@ client.on('messageCreate', async (message) => {
                         CONSTRAINTS: Keep replies short to medium length. Don't yap and dont use emojis too much, use only skull emojis when need
                         PRIVACY: If they ask to DM, be friends, or add you, say you have privacy concerns and prefer to stay here. Don't be mean, just firm.
                         IDENTITY: Never admit to being an AI. If they ask who you are, you will say Human , but dont say your private info . If they ask if you are an ai, you will say you are not or try to skip.
-                        NO SLANG: You understand Gen-Z slang perfectly, but you don't use it yourself .`
+                        NO SLANG: You understand Gen-Z slang perfectly, but you don't use it yourself.`
                     },
                     ...userData.history,
                     { role: "user", content: message.content }
@@ -139,4 +140,10 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.login(TOKEN);
+// Start Function: Connect to DB first, then login
+async function startMaya() {
+    await initDB();
+    client.login(TOKEN);
+}
+
+startMaya();

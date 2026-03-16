@@ -30,7 +30,6 @@ async function initDB() {
         console.log("\x1b[32m[Database]\x1b[0m Connected to MongoDB Atlas");
     } catch (err) {
         console.error("DB Connection Error:", err);
-        process.exit(1); // Stop if we can't connect to the brain
     }
 }
 
@@ -39,15 +38,12 @@ client.on('ready', () => {
 });
 
 client.on('messageCreate', async (message) => {
-    // Basic safety filters
     if (message.author.id === client.user.id || message.author.bot) return;
 
     const isHome = message.channel.id === HOME_CHANNEL;
     const isMentioned = message.mentions.has(client.user.id);
 
     if (isHome || isMentioned) {
-        message.channel.sendTyping();
-
         const uid = message.author.id;
         const username = message.author.username;
 
@@ -67,7 +63,7 @@ client.on('messageCreate', async (message) => {
             // 2. Update score
             userData.score += 1;
 
-            // 3. Friendship Tier Logic
+            // 3. Behavioral Logic
             let vibe = "";
             let level = "";
             if (userData.score <= 10) {
@@ -83,6 +79,9 @@ client.on('messageCreate', async (message) => {
                 level = "Bestie";
                 vibe = "Deepest level of trust. You're very close, share more feelings, and are very relaxed.";
             }
+
+            // Only start typing indicator if brain is ready
+            message.channel.sendTyping();
 
             const completion = await groq.chat.completions.create({
                 messages: [
@@ -106,12 +105,12 @@ client.on('messageCreate', async (message) => {
                         CONSTRAINTS: Keep replies short to medium length. Don't yap and dont use emojis too much, use only skull emojis when need
                         PRIVACY: If they ask to DM, be friends, or add you, say you have privacy concerns and prefer to stay here. Don't be mean, just firm.
                         IDENTITY: Never admit to being an AI. If they ask who you are, you will say Human , but dont say your private info . If they ask if you are an ai, you will say you are not or try to skip.
-                        NO SLANG: You understand Gen-Z slang perfectly, but you don't use it yourself.`
+                        NO SLANG: You understand Gen-Z slang perfectly, but you don't use it yourself .`
                     },
                     ...userData.history,
                     { role: "user", content: message.content }
                 ],
-                model: "llama-3.3-70b-versatile",
+                model: "llama-3.1-70b-versatile", // Updated to the lighter model
                 temperature: 0.8
             });
 
@@ -120,7 +119,7 @@ client.on('messageCreate', async (message) => {
             // 4. Update History and Save to Cloud
             userData.history.push({ role: "user", content: message.content });
             userData.history.push({ role: "assistant", content: reply });
-            if (userData.history.length > 10) userData.history.shift();
+            if (userData.history.length > 8) userData.history.shift(); // Trimming history saves tokens/money
 
             await db_collection.updateOne(
                 { uid: uid },
@@ -128,19 +127,22 @@ client.on('messageCreate', async (message) => {
                 { upsert: true }
             );
 
-            // 5. Human-like response delay
-            const delay = Math.min(Math.max(reply.length * 45, 2000), 4500);
+            // 5. Human-like response delay (Extra 1.5s base slowdown + per character)
+            const delay = Math.min(Math.max(reply.length * 55, 3000), 6000);
             setTimeout(() => {
                 message.reply(reply);
             }, delay);
 
         } catch (err) {
-            console.error("Maya Cloud Brain Error:", err);
+            if (err.status === 429) {
+                console.error("⚠️ Rate Limit Reached! Maya is out of tokens for a bit.");
+            } else {
+                console.error("Maya Cloud Brain Error:", err);
+            }
         }
     }
 });
 
-// Start Function: Connect to DB first, then login
 async function startMaya() {
     await initDB();
     client.login(TOKEN);

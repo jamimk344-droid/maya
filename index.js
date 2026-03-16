@@ -30,12 +30,12 @@ async function initDB() {
         console.log("\x1b[32m[Database]\x1b[0m Connected to MongoDB Atlas");
     } catch (err) {
         console.error("DB Connection Error:", err);
-        process.exit(1); 
     }
 }
 
 client.on('ready', () => {
     console.log(`\x1b[35m[Maya]\x1b[0m System Active. Logged in as ${client.user.tag}`);
+    initDB();
 });
 
 client.on('messageCreate', async (message) => {
@@ -45,22 +45,28 @@ client.on('messageCreate', async (message) => {
     const isMentioned = message.mentions.has(client.user.id);
 
     if (isHome || isMentioned) {
+        message.channel.sendTyping();
+
         const uid = message.author.id;
         const username = message.author.username;
 
         try {
-            message.channel.sendTyping();
-
             // 1. Fetch user memory from MongoDB
             let userData = await db_collection.findOne({ uid: uid });
+
             if (!userData) {
-                userData = { uid: uid, name: username, score: 0, history: [] };
+                userData = { 
+                    uid: uid, 
+                    name: username, 
+                    score: 0, 
+                    history: [] 
+                };
             }
 
             // 2. Update score
             userData.score += 1;
 
-            // 3. Behavioral Logic (KEPT EXACTLY THE SAME)
+            // 3. Behavioral Logic (Stays exactly the same)
             let vibe = "";
             let level = "";
             if (userData.score <= 10) {
@@ -104,7 +110,7 @@ client.on('messageCreate', async (message) => {
                     ...userData.history,
                     { role: "user", content: message.content }
                 ],
-                model: "llama-3.1-70b-versatile",
+                model: "llama-3.3-70b-versatile",
                 temperature: 0.8
             });
 
@@ -113,12 +119,16 @@ client.on('messageCreate', async (message) => {
             // 4. Update History and Save to Cloud
             userData.history.push({ role: "user", content: message.content });
             userData.history.push({ role: "assistant", content: reply });
-            if (userData.history.length > 8) userData.history.shift();
+            if (userData.history.length > 10) userData.history.shift();
 
-            await db_collection.updateOne({ uid: uid }, { $set: userData }, { upsert: true });
+            await db_collection.updateOne(
+                { uid: uid },
+                { $set: userData },
+                { upsert: true }
+            );
 
-            // 5. Human Slowdown (Min 3s, Max 6s)
-            const delay = Math.min(Math.max(reply.length * 55, 3000), 6000);
+            // 5. Human-like response delay
+            const delay = Math.min(Math.max(reply.length * 45, 2000), 4500);
             setTimeout(() => {
                 message.reply(reply);
             }, delay);
@@ -129,9 +139,4 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-async function startMaya() {
-    await initDB();
-    client.login(TOKEN);
-}
-
-startMaya();
+client.login(TOKEN);

@@ -30,6 +30,7 @@ async function initDB() {
         console.log("\x1b[32m[Database]\x1b[0m Connected to MongoDB Atlas");
     } catch (err) {
         console.error("DB Connection Error:", err);
+        process.exit(1); 
     }
 }
 
@@ -48,22 +49,18 @@ client.on('messageCreate', async (message) => {
         const username = message.author.username;
 
         try {
+            message.channel.sendTyping();
+
             // 1. Fetch user memory from MongoDB
             let userData = await db_collection.findOne({ uid: uid });
-
             if (!userData) {
-                userData = { 
-                    uid: uid, 
-                    name: username, 
-                    score: 0, 
-                    history: [] 
-                };
+                userData = { uid: uid, name: username, score: 0, history: [] };
             }
 
             // 2. Update score
             userData.score += 1;
 
-            // 3. Behavioral Logic
+            // 3. Behavioral Logic (KEPT EXACTLY THE SAME)
             let vibe = "";
             let level = "";
             if (userData.score <= 10) {
@@ -79,9 +76,6 @@ client.on('messageCreate', async (message) => {
                 level = "Bestie";
                 vibe = "Deepest level of trust. You're very close, share more feelings, and are very relaxed.";
             }
-
-            // Only start typing indicator if brain is ready
-            message.channel.sendTyping();
 
             const completion = await groq.chat.completions.create({
                 messages: [
@@ -110,7 +104,7 @@ client.on('messageCreate', async (message) => {
                     ...userData.history,
                     { role: "user", content: message.content }
                 ],
-                model: "llama-3.1-70b-versatile", // Updated to the lighter model
+                model: "llama-3.1-70b-versatile",
                 temperature: 0.8
             });
 
@@ -119,26 +113,18 @@ client.on('messageCreate', async (message) => {
             // 4. Update History and Save to Cloud
             userData.history.push({ role: "user", content: message.content });
             userData.history.push({ role: "assistant", content: reply });
-            if (userData.history.length > 8) userData.history.shift(); // Trimming history saves tokens/money
+            if (userData.history.length > 8) userData.history.shift();
 
-            await db_collection.updateOne(
-                { uid: uid },
-                { $set: userData },
-                { upsert: true }
-            );
+            await db_collection.updateOne({ uid: uid }, { $set: userData }, { upsert: true });
 
-            // 5. Human-like response delay (Extra 1.5s base slowdown + per character)
+            // 5. Human Slowdown (Min 3s, Max 6s)
             const delay = Math.min(Math.max(reply.length * 55, 3000), 6000);
             setTimeout(() => {
                 message.reply(reply);
             }, delay);
 
         } catch (err) {
-            if (err.status === 429) {
-                console.error("⚠️ Rate Limit Reached! Maya is out of tokens for a bit.");
-            } else {
-                console.error("Maya Cloud Brain Error:", err);
-            }
+            console.error("Maya Cloud Brain Error:", err);
         }
     }
 });
